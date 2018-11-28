@@ -58,23 +58,23 @@ class UCB1Agent:
         self.samples[self.played_arm] += 1
 
 
-# class ThompsonSamplingAgent:
-#
-#     def __init__(self, n_arms, dist='bernoulli', pdist='beta', **kwargs):
-#
-#         self.arms = n_arms
-#         self.num_iters = 0
-#         self.dist = dist
-#         self.pdist = pdist
-#
-#         if self.dist == 'bernoulli':
-#
-#             if 'mean' in kwargs:
-#                 assert len(kwargs['mean']) == n_arms
-#                 self.means = kwargs['mean']
-#
-#             else:
-#                 self.means = np.zeros((n_arms, 1))
-#
-#             self.samples = np.zeros((n_arms, 1))
-#             self.best_arm = np.argmax(self.means)
+class ThompsonSamplingAgent:
+
+    def __init__(self, n_arms, dist='bernoulli', pdist='beta', **kwargs):
+
+        self.arms = n_arms
+        self.num_iters = 0
+        self.dist = dist
+        self.pdist = pdist
+
+        if self.dist == 'bernoulli':
+
+            if 'mean' in kwargs:
+                assert len(kwargs['mean']) == n_arms
+                self.means = kwargs['mean']
+
+            else:
+                self.means = np.zeros((n_arms, 1))
+
+            self.samples = np.zeros((n_arms, 1))
+            self.best_arm = np.argmax(self.means)

@@ -24,10 +24,10 @@ class Environment:
             if 'alpha' in kwargs:
                 alpha_ = kwargs['alpha']
                 if type(alpha_) is float:
-                    self.alpha == [alpha_] * self.arms
+                    self.alpha =  np.array([alpha_] * self.arms)
                 elif type(alpha_) is list or type(alpha_) is np.ndarray:
                     assert len(alpha_) == self.arms and all(alpha_ > 0)\
-                        and all(alpha_ <= 2)
+                        and all(alpha_ <= 2.01)
                     self.alpha = alpha_
             else:
                 self.alpha = np.random.uniform(0, 2, n)
@@ -35,7 +35,7 @@ class Environment:
             if 'beta' in kwargs:
                 beta_ = kwargs['beta']
                 if type(beta_) is float:
-                    self.beta == [beta_] * self.arms
+                    self.beta == np.array([beta_] * self.arms)
                 elif type(beta_) is list or type(beta_) is np.ndarray:
                     assert len(beta_) == self.arms
                     self.beta = beta_
@@ -45,7 +45,7 @@ class Environment:
             if 'scale' in kwargs:
                 scale_ = kwargs['scale']
                 if type(scale_) is float:
-                    self.scale == [scale_] * self.arms
+                    self.scale == np.array([scale_] * self.arms)
                 elif type(scale_) is list or type(scale_) is np.ndarray:
                     assert len(scale_) == self.arms
                     self.scale = scale_
@@ -54,21 +54,9 @@ class Environment:
 
             if 'mean' in kwargs:
                 assert len(kwargs['mean']) == n
-                self.mean = kwargs['mean']
+                self.mean = np.array(kwargs['mean'])
             else:
                 self.mean = np.random.uniform(0, 1, n)
-
-
-            k = 1 - np.abs(1-self.alpha)
-            phi_0 = -0.5*self.beta*k/self.alpha
-
-            beta_prime = np.array([beta if alpha == 1 else
-                -np.tan(0.5*np.pi*(1-alpha))*np.tan(alpha*phi) for
-                alpha, beta, phi in zip(self.alphas, self.betas, phi_0)])
-
-            self.k = k
-            self.phi0 = phi_0
-            sellf.beta_prime = beta_prime
 
             if all(self.alpha > 1):
                 self.best_arm = np.argmax(self.mean)
@@ -76,28 +64,34 @@ class Environment:
                 # No best arm exists since means are infinite
                 self.best_arm = None
 
+    def sample(self):
+
+        return self.iter(0)
+
     def iter(self, arm):
+
+        assert arm < self.arms
 
         if self.dist == 'bernoulli':
 
-            assert arm < self.arms
             return np.random.binomial(1, self.params[arm], 1)
 
         if self.dist == 'stable':
+            
+            _alpha = self.alpha[arm]
+            _beta = self.beta[arm]
 
-            assert arm < self.arms
-            alpha_ = self.alpha[arm]
-            phi0_ = self.phi0[arm]
+            b = np.arctan(_beta * np.tan (0.5 * np.pi *_alpha))
+            s = (1 + (_beta * np.tan(0.5 * np.pi * _alpha))**2)**(0.5/_alpha)
 
-            u = np.random.uniform(0, 1)
-            phi = np.pi * u**(-0.5)
-            eps = 1 - alpha_
-            tau = -eps*np.tan(alpha_* phi0_)
-            w = -np.ln(np.random.uniform(0, 1))
-            z = (np.cos(eps*phi) -
-                np.tan(alpha_*phi0_)*np.sin(eps*phi)/(w * np.cos(phi)))
-            d = z**(eps/alpha_)/eps
-            s = np.tan(alpha_*phi0_) + z**(eps/alpha_)*(np.sin(alpha_*phi) -
-                np.tan(alpha_*phi0_)*np.cos(alpha_*phi))/np.cos(phi)
+            v = np.random.uniform(-0.5*np.pi, 0.5*np.pi)
+            w = np.random.exponential(1)
 
-            return s
+            if _alpha == 1:
+                z = 2/np.pi * ((0.5*np.pi + _beta*v)*np.tan(v) - 
+                    _beta * np.log((np.pi*0.5*w*np.cos(v))/(0.5*np.pi + _beta*v)))
+            else:
+                z = s * (np.sin(_alpha*(v + b))/(np.cos(v)**(1/_alpha))) *\
+                    (np.cos(v - _alpha*(v + b))/w)**((1-_alpha)/_alpha)
+ 
+            return float(z*self.scale[arm] + self.mean[arm])
