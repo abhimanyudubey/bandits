@@ -7,6 +7,7 @@ from pathos.multiprocessing import Pool
 import argparse
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import cPickle as pickle
 
 matplotlib.rcParams['lines.linewidth'] = 2
 matplotlib.rcParams['axes.grid'] = True
@@ -369,6 +370,16 @@ if __name__ == "__main__":
     else:
         z = compare_algorithms_pool(
             args.trials, args.k, args.t, args.alpha, args.sigma, args.cores)
+
+    data_dump = {
+        'k': args.k,
+        't': args.t,
+        'alpha': args.alpha,
+        'sigma': args.sigma,
+        'data': z}
+    with open('raw_T%d_K%d_a%.2f_s%d_n%d.pkl', 'wb') as out_file:
+        pickle.dump(data_dump, out_file, protocol=pickle.HIGHEST_PROTOCOL)
+
     plot_curves(
         labels, z, args.t, 'comparsion_T%d_K%d_a%.2f_s%d_n%d.pdf' %
         (args.t, args.k, args.alpha, args.sigma, args.trials))
