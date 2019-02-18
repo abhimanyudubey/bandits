@@ -3,9 +3,10 @@ from scipy.special import gamma
 from scipy.stats import norm
 import copy
 import matplotlib
+from pathos.multiprocessing import Pool
+import argparse
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from pathos.multiprocessing import Pool
 
 matplotlib.rcParams['lines.linewidth'] = 2
 matplotlib.rcParams['axes.grid'] = True
@@ -22,7 +23,7 @@ matplotlib.rcParams['legend.fontsize'] = 14
 matplotlib.rcParams['figure.subplot.top'] = 0.85
 matplotlib.rcParams['axes.facecolor'] = 'white'
 matplotlib.rcParams['axes.linewidth'] = 0.8
-Q = 5
+Q = 50
 
 
 def cms_alpha(_alpha, _beta, mu, sigma):
@@ -68,7 +69,7 @@ def alpha_ts_posterior_update(
             if u < min_u or u <= lim:
                 corr_lambda = lambda_t
             i += 1
-            if i > 45000:
+            if i > 100000:
                 break
 
         lambda_t = corr_lambda
@@ -233,9 +234,9 @@ def compare_algorithms(num_trials, K, T, alpha, sigma):
 
         this_trial = []
         this_trial.append(np.expand_dims(
-            np.array(alpha_ts(K, T, alpha, sigma, mus, mu_priors)), 0))
+            np.array(alpha_ts(K, T, alpha, 25, mus, mu_priors)), 0))
         this_trial.append(np.expand_dims(
-            np.array(alpha_ts(K, T, alpha, sigma, mus, mu_priors, True)), 0))
+            np.array(alpha_ts(K, T, alpha, 25, mus, mu_priors, True)), 0))
         this_trial.append(np.expand_dims(
             np.array(robust_ucb(K, T, alpha, sigma, mus)), 0))
         this_trial.append(np.expand_dims(
@@ -270,9 +271,11 @@ def compare_algorithms_pool(num_trials, K, T, alpha, sigma, n_threads=32):
     pool_args = []
 
     for n in range(num_trials):
-        mus = np.random.uniform(0, 2000, (K, 1)).flatten().tolist()
-        mu_priors = np.random.uniform(0, 2000, (K, 1)).flatten().tolist()
-        pool_args.append((K, T, alpha, sigma, mus, mu_priors))
+        mus = np.random.uniform(0, 2000, (K, 1)).flatten()
+        d = np.random.uniform(-400, 400, (K, 1)).flatten()
+        mu_priors = mus + d
+        pool_args.append((
+            K, T, alpha, sigma, mus.tolist(), mu_priors.tolist()))
 
     def map_fn(args):
 
@@ -326,8 +329,8 @@ def plot_curves(labels, curves, T, output_file):
             linewidth=0)
 
     plt.xscale('log')
-    plt.ylim(0, 3000)
-    plt.xlim(0, T)
+    plt.ylim(0, 2000)
+    plt.xlim(100, T)
     plt.xlabel('T')
     plt.ylabel('Average Regret at Time T')
     plt.legend(loc='upper right')
@@ -337,11 +340,21 @@ def plot_curves(labels, curves, T, output_file):
 
 if __name__ == "__main__":
 
-    T = 100000
-    K = 50
-    alpha = 1.5
-    sigma = 2500
-    num_trials = 64
+    parser = argparse.ArgumentParser('alpha-Stable Bandit Simulations')
+    parser.add_argument('-k', help='Number of arms', required=True, type=int)
+    parser.add_argument(
+        '-t', help='Number of iterations', type=int, default=None)
+    parser.add_argument('-a', '--alpha', help='alpha', default=1.8, type=float)
+    parser.add_argument('-s', '--sigma', help='sigma', default=2500, type=int)
+    parser.add_argument(
+        '-n', '--trials', help='Number of trials', default=100, type=int)
+    parser.add_argument(
+        '-c', '--cores', help='Number of threads', default=16, type=int)
+
+    args = parser.parse_args()
+
+    if args.t is None:
+        args.t = args.k*1000
 
     labels = [
         'Alpha-TS',
@@ -350,5 +363,12 @@ if __name__ == "__main__":
         '$\epsilon$-Greedy',
         'Random']
 
-    z = compare_algorithms_pool(num_trials, K, T, alpha, sigma, 16)
-    plot_curves(labels, z, T, 'comparsion.pdf')
+    if args.cores == 1:
+        z = compare_algorithms(
+            args.trials, args.k, args.t, args.alpha, args.sigma)
+    else:
+        z = compare_algorithms_pool(
+            args.trials, args.k, args.t, args.alpha, args.sigma, args.cores)
+    plot_curves(
+        labels, z, args.t, 'comparsion_T%d_K%d_a%.2f_s%d_n%d.pdf' %
+        (args.t, args.k, args.alpha, args.sigma, args.trials))
