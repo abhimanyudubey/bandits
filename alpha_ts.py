@@ -377,7 +377,9 @@ if __name__ == "__main__":
         'alpha': args.alpha,
         'sigma': args.sigma,
         'data': z}
-    with open('raw_T%d_K%d_a%.2f_s%d_n%d.pkl', 'wb') as out_file:
+    dump_file = 'raw_T%d_K%d_a%.2f_s%d_n%d.pkl' % (
+        args.t, args.k, args.alpha, args.sigma, args.trials)
+    with open(dump_file, 'wb') as out_file:
         pickle.dump(data_dump, out_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     plot_curves(
