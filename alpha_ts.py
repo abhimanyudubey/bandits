@@ -223,15 +223,44 @@ def random(K, T, alpha, sigma, mus):
     return regrets
 
 
+def gaussian_ts(K, T, alpha, sigma, mus, mu_priors):
+    ''' Gaussian Thompson Sampling. '''
+
+    assert len(mus) == K
+
+    reward_sum = 0
+    regrets = []
+
+    for t in range(1, T+1):
+
+        posterior_samples = [
+            np.random.normal(mu_priors[i], sigma)
+            for i in range(K)]
+        ca = np.argmax(posterior_samples)
+        reward = cms_alpha(alpha, 0, mus[ca], sigma)
+
+        mu_priors[ca] = mu_priors[ca] + reward
+
+        reward_sum += reward
+        mean_regret = np.max(mus) - reward_sum/t
+
+        regrets.append(mean_regret)
+
+    return regrets
+
+
 # experimental pipelines
-def compare_algorithms(num_trials, K, T, alpha, sigma):
+def compare_algorithms(
+        num_trials, K, T, alpha, sigma, delta):
 
     regrets_overall = []
-    trials_overall = [None]*5
+    trials_overall = [None]*6
 
     for n in range(num_trials):
-        mus = list(np.random.uniform(0, 2000, (K, 1)))
-        mu_priors = list(np.random.uniform(0, 2000, (K, 1)))
+        mus = np.random.uniform(0, 2000, (K, 1)).flatten()
+        d = np.random.uniform(-delta, delta, (K, 1)).flatten()
+        mu_priors = (mus + d).tolist()
+        mus = mus.tolist()
 
         this_trial = []
         this_trial.append(np.expand_dims(
@@ -239,13 +268,15 @@ def compare_algorithms(num_trials, K, T, alpha, sigma):
         this_trial.append(np.expand_dims(
             np.array(alpha_ts(K, T, alpha, 25, mus, mu_priors, True)), 0))
         this_trial.append(np.expand_dims(
+            np.array(gaussian_ts(K, T, alpha, sigma, mus, mu_priors)), 0))
+        this_trial.append(np.expand_dims(
             np.array(robust_ucb(K, T, alpha, sigma, mus)), 0))
         this_trial.append(np.expand_dims(
             np.array(epsilon_greedy(K, T, alpha, sigma, mus)), 0))
         this_trial.append(np.expand_dims(
             np.array(random(K, T, alpha, sigma, mus)), 0))
 
-        for j in range(5):
+        for j in range(6):
             if trials_overall[j] is None:
                 trials_overall[j] = this_trial[j]
             else:
@@ -255,7 +286,7 @@ def compare_algorithms(num_trials, K, T, alpha, sigma):
         if n % 5 == 0:
             print('%d trials completed.' % (n+1))
 
-    for j in range(5):
+    for j in range(6):
         regrets_overall.append([
             np.mean(trials_overall[j], axis=0),
             np.std(trials_overall[j], axis=0)])
@@ -263,17 +294,18 @@ def compare_algorithms(num_trials, K, T, alpha, sigma):
     return regrets_overall
 
 
-def compare_algorithms_pool(num_trials, K, T, alpha, sigma, n_threads=32):
+def compare_algorithms_pool(
+        num_trials, K, T, alpha, sigma, delta, n_threads=32):
 
     regrets_overall = []
-    trials_overall = [None]*5
+    trials_overall = [None]*6
 
     mpool = Pool(n_threads)
     pool_args = []
 
     for n in range(num_trials):
         mus = np.random.uniform(0, 2000, (K, 1)).flatten()
-        d = np.random.uniform(-400, 400, (K, 1)).flatten()
+        d = np.random.uniform(-delta, delta, (K, 1)).flatten()
         mu_priors = mus + d
         pool_args.append((
             K, T, alpha, sigma, mus.tolist(), mu_priors.tolist()))
@@ -288,6 +320,8 @@ def compare_algorithms_pool(num_trials, K, T, alpha, sigma, n_threads=32):
         this_trial.append(np.expand_dims(
             np.array(alpha_ts(K, T, alpha, sigma, mus, mu_priors, True)), 0))
         this_trial.append(np.expand_dims(
+            np.array(gaussian_ts(K, T, alpha, sigma, mus, mu_priors)), 0))
+        this_trial.append(np.expand_dims(
             np.array(robust_ucb(K, T, alpha, sigma, mus)), 0))
         this_trial.append(np.expand_dims(
             np.array(epsilon_greedy(K, T, alpha, sigma, mus)), 0))
@@ -299,14 +333,14 @@ def compare_algorithms_pool(num_trials, K, T, alpha, sigma, n_threads=32):
     results = mpool.map(map_fn, pool_args)
 
     for result in results:
-        for j in range(5):
+        for j in range(6):
             if trials_overall[j] is None:
                 trials_overall[j] = result[j]
             else:
                 trials_overall[j] = np.concatenate(
                     (trials_overall[j], result[j]), 0)
 
-    for j in range(5):
+    for j in range(6):
         regrets_overall.append([
             np.mean(trials_overall[j], axis=0),
             np.std(trials_overall[j], axis=0)])
@@ -314,10 +348,85 @@ def compare_algorithms_pool(num_trials, K, T, alpha, sigma, n_threads=32):
     return regrets_overall
 
 
+def compare_alphas(num_trials, K, T, sigma, delta, n_threads=32):
+
+    regrets_overall = [[], []]
+    trials_overall = [[None]*5]*2
+
+    mpool = Pool(n_threads)
+    pool_args = []
+
+    for n in range(num_trials):
+        mus = np.random.uniform(0, 2000, (K, 1)).flatten()
+        d = np.random.uniform(-delta, delta, (K, 1)).flatten()
+        mu_priors = mus + d
+        pool_args.append((
+            K, T, sigma, mus.tolist(), mu_priors.tolist()))
+
+    def map_fn(args):
+
+        K, T, sigma, mus, mu_p = args
+
+        alphas = [1.1, 1.3, 1.5, 1.7, 1.9]
+
+        this_trial = []
+        for alpha in alphas:
+            this_trial.append(np.expand_dims(
+                np.array(alpha_ts(K, T, alpha, sigma, mus, mu_p)), 0))
+            this_trial.append(np.expand_dims(
+                np.array(alpha_ts(K, T, alpha, sigma, mus, mu_p, True)), 0))
+
+        return this_trial
+
+    results = mpool.map(map_fn, pool_args)
+
+    for result in results:
+        for j in range(5):
+            for k in range(2):
+                if trials_overall[j][k] is None:
+                    trials_overall[j][k] = result[2*j + k]
+                else:
+                    trials_overall[j][k] = np.concatenate(
+                        (trials_overall[j][k], result[2*j + k]), 0)
+
+    for j in range(5):
+        for k in range(2):
+            regrets_overall[k].append([
+                np.mean(trials_overall[j][k], axis=0)[-1],
+                np.std(trials_overall[j][k], axis=0)][-1])
+
+    return regrets_overall
+
+
 def plot_curves(labels, curves, T, output_file):
 
     colors =\
-        ['green', 'blue', 'mediumvioletred', 'darkorchid', 'purple']
+        ['green', 'blue', 'mediumvioletred', 'darkorchid', 'purple', 'red']
+
+    for j in range(len(labels)):
+        plt.plot(
+            range(T), curves[j][0], label=r'%s' % (labels[j]),
+            color=colors[j])
+        y1 = [z+s/2 for (z, s) in zip(list(curves[j][0]), list(curves[j][1]))]
+        y2 = [z-s/2 for (z, s) in zip(list(curves[j][0]), list(curves[j][1]))]
+        plt.fill_between(
+            range(T), y1=y1, y2=y2, alpha=0.15, facecolor=colors[j],
+            linewidth=0)
+
+    plt.xscale('log')
+    plt.ylim(0, 2000)
+    plt.xlim(100, T)
+    plt.xlabel(r'$T \times 10^4$')
+    plt.ylabel('Time-Normalized Regret')
+    plt.legend(loc='upper right')
+
+    plt.savefig(output_file, dpi=300)
+
+
+def plot_curves_alphacomp(labels, curves, T, output_file):
+
+    colors =\
+        ['green', 'blue', 'mediumvioletred', 'darkorchid', 'purple', 'red']
 
     for j in range(len(labels)):
         plt.plot(
@@ -342,46 +451,89 @@ def plot_curves(labels, curves, T, output_file):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser('alpha-Stable Bandit Simulations')
-    parser.add_argument('-k', help='Number of arms', required=True, type=int)
+    parser.add_argument(
+        '-k', help='Number of arms', required=True, type=int)
     parser.add_argument(
         '-t', help='Number of iterations', type=int, default=None)
-    parser.add_argument('-a', '--alpha', help='alpha', default=1.8, type=float)
-    parser.add_argument('-s', '--sigma', help='sigma', default=2500, type=int)
+    parser.add_argument(
+        '-a', '--alpha', help='alpha', default=1.8, type=float)
+    parser.add_argument(
+        '-d', '--delta', help='delta for priors', default=500, type=float)
+    parser.add_argument(
+        '-s', '--sigma', help='sigma', default=2500, type=int)
     parser.add_argument(
         '-n', '--trials', help='Number of trials', default=100, type=int)
     parser.add_argument(
         '-c', '--cores', help='Number of threads', default=16, type=int)
+    parser.add_argument(
+        '-e', '--experiment', help='Experiment type', default=0, type=int)
 
     args = parser.parse_args()
 
     if args.t is None:
         args.t = args.k*1000
 
-    labels = [
-        'Alpha-TS',
-        'Robust Alpha-TS',
-        'Robust UCB',
-        '$\epsilon$-Greedy',
-        'Random']
+    if args.e == 0:
 
-    if args.cores == 1:
-        z = compare_algorithms(
-            args.trials, args.k, args.t, args.alpha, args.sigma)
-    else:
-        z = compare_algorithms_pool(
-            args.trials, args.k, args.t, args.alpha, args.sigma, args.cores)
+        labels = [
+            'Alpha-TS',
+            'Robust Alpha-TS',
+            'Gaussian TS',
+            'Robust UCB',
+            '$\epsilon$-Greedy',
+            'Random']
 
-    data_dump = {
-        'k': args.k,
-        't': args.t,
-        'alpha': args.alpha,
-        'sigma': args.sigma,
-        'data': z}
-    dump_file = 'raw_T%d_K%d_a%.2f_s%d_n%d.pkl' % (
-        args.t, args.k, args.alpha, args.sigma, args.trials)
-    with open(dump_file, 'wb') as out_file:
-        pickle.dump(data_dump, out_file, protocol=pickle.HIGHEST_PROTOCOL)
+        if args.cores == 1:
+            z = compare_algorithms(
+                args.trials, args.k, args.t, args.alpha, args.sigma,
+                args.delta)
+        else:
+            z = compare_algorithms_pool(
+                args.trials, args.k, args.t, args.alpha, args.sigma,
+                args.delta, args.cores)
 
-    plot_curves(
-        labels, z, args.t, 'comparsion_T%d_K%d_a%.2f_s%d_n%d.pdf' %
-        (args.t, args.k, args.alpha, args.sigma, args.trials))
+        data_dump = {
+            'k': args.k,
+            't': args.t,
+            'alpha': args.alpha,
+            'sigma': args.sigma,
+            'delta': args.delta,
+            'data': z}
+        dump_file = 'raw_T%d_K%d_a%.2f_d%.2f_s%d_n%d.pkl' % (
+            args.t, args.k, args.alpha, args.delta, args.sigma, args.trials)
+        with open(dump_file, 'wb') as out_file:
+            pickle.dump(data_dump, out_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        plot_curves(
+            labels, z, args.t, 'comparison_T%d_K%d_a%.2f_s%d_n%d.pdf' %
+            (args.t, args.k, args.alpha, args.sigma, args.trials))
+
+    elif args.e == 1:
+
+        labels = [
+            '$\alpha = 1.1$',
+            '$\alpha = 1.3$',
+            '$\alpha = 1.5$',
+            '$\alpha = 1.7$',
+            '$\alpha = 1.9$']
+
+        z = compare_alphas(
+            args.trials, args.k, args.t, args.sigma, args.delta)
+
+        data_dump = {
+            'k': args.k,
+            't': args.t,
+            'alpha': [1.1, 1.3, 1.5, 1.7, 1.9],
+            'sigma': args.sigma,
+            'delta': args.delta,
+            'data': z}
+
+        dump_file = 'raw_alphacomp_T%d_K%d_d%.2f_s%d_n%d.pkl' % (
+            args.t, args.k, args.delta, args.sigma, args.trials)
+
+        with open(dump_file, 'wb') as out_file:
+            pickle.dump(data_dump, out_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        plot_curves_alphacomp(
+            labels, z, args.t, 'alphacomp_T%d_K%d_s%d_n%d.pdf' %
+            (args.t, args.k, args.sigma, args.trials))
