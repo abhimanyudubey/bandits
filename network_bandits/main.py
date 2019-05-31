@@ -72,10 +72,74 @@ class NetworkBandit:
         self.cmap = clique_complete[0]
         self.cliques = clique_complete[1]
 
+        if eps:
+            # means are network bounded
+            self.eps = eps
+            self.bandit_type = 'bounded'
+
+            temp_means = None
+            for arm in range(self.num_arms):
+                this_arm_means = {}
+                for clique in self.cliques[arm]:
+                    if clique[0] not in this_arm_means:
+                        this_arm_means[clique[0]] =\
+                            np.random.uniform(mu_min, mu_max)
+                    base_mean = this_arm_means[clique[0]]
+                    for node in clique[1:]:
+                        if node not in this_arm_means:
+                            this_arm_means[node] =\
+                                base_mean + np.random.uniform(
+                                    -self.eps, self.eps)
+                means_transpose =\
+                    [this_arm_means[x] for x in range(self.num_agents)]
+                this_arm_means = np.expand_dims(np.asarray(means_transpose), 0)
+                if temp_means is not None:
+                    temp_means = np.concatenate(
+                        (temp_means, this_arm_means))
+                else:
+                    temp_means = this_arm_means
+
+            self.means = temp_means.transpose()
+
+        else:
+            # randomly initialize means within the range
+            self.eps = None
+            self.means = []
+            self.bandit_type = 'random'
+            for i in range(self.num_agents):
+                this_means = []
+                for j in range(self.num_arms):
+                    this_means.append(np.random.uniform(mu_min, mu_max))
+                self.means.append(this_means)
+
+            self.means = np.asarray(self.means)
+
+    def verifyInit(self):
+        # verify if the assignments are all correct
+        if self.eps is None:
+            return self.means is not None
+        else:
+            for i, graph in enumerate(self.graphs):
+                for edge in graph.edges:
+                    src, dest = edge
+                    print(src, dest)
+                    edge_ok = np.abs(
+                        self.means[src][i] - self.means[dest][i]) <= self.eps
+                    if not edge_ok:
+                        return False
+
+            return True
+
+
+class NetworkAgent:
+
+    def __init__(self):
+        return None
+
 
 if __name__ == '__main__':
 
-    G = NetworkBandit(30, 5, )
-    cmap, cliques = assignCliques(G)
+    graphs = [NetworkBandit.generateGraph(5, p=0.4) for _ in range(4)]
+    G = NetworkBandit(5, 4, graphs, eps=0.1)
 
-    print(len(cliques), cliques)
+    print(G.verifyInit())
