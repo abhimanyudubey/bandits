@@ -74,22 +74,27 @@ class NetworkBandit:
 
         if eps:
             # means are network bounded
+            if type(eps) is not list:
+                eps = [eps]*self.num_arms
+
+            assert type(eps) is list
             self.eps = eps
             self.bandit_type = 'bounded'
 
             temp_means = None
             for arm in range(self.num_arms):
                 this_arm_means = {}
-                for clique in self.cliques[arm]:
-                    if clique[0] not in this_arm_means:
-                        this_arm_means[clique[0]] =\
+                print(self.graphs[arm].edges)
+                print(list(nx.bfs_edges(self.graphs[arm], 0)))
+                for node in range(self.num_agents):
+                    if node not in this_arm_means:
+                        this_arm_means[node] =\
                             np.random.uniform(mu_min, mu_max)
-                    base_mean = this_arm_means[clique[0]]
-                    for node in clique[1:]:
-                        if node not in this_arm_means:
-                            this_arm_means[node] =\
-                                base_mean + np.random.uniform(
-                                    -self.eps, self.eps)
+                    for dest_node in self.graphs[arm].neighbors(node):
+                        if dest_node not in this_arm_means:
+                            this_arm_means[dest_node] =\
+                                this_arm_means[node] + np.random.uniform(
+                                    -self.eps[arm]*0.5, self.eps[arm]*0.5)
                 means_transpose =\
                     [this_arm_means[x] for x in range(self.num_agents)]
                 this_arm_means = np.expand_dims(np.asarray(means_transpose), 0)
@@ -122,9 +127,10 @@ class NetworkBandit:
             for i, graph in enumerate(self.graphs):
                 for edge in graph.edges:
                     src, dest = edge
-                    print(src, dest)
+                    print(i, src, dest)
                     edge_ok = np.abs(
-                        self.means[src][i] - self.means[dest][i]) <= self.eps
+                        self.means[src][i] -
+                        self.means[dest][i]) <= self.eps[i]
                     if not edge_ok:
                         return False
 
@@ -139,7 +145,7 @@ class NetworkAgent:
 
 if __name__ == '__main__':
 
-    graphs = [NetworkBandit.generateGraph(5, p=0.4) for _ in range(4)]
-    G = NetworkBandit(5, 4, graphs, eps=0.1)
+    graphs = [NetworkBandit.generateGraph(5, p=0.5) for _ in range(1)]
+    G = NetworkBandit(5, 1, graphs, eps=0.1)
 
     print(G.verifyInit())
