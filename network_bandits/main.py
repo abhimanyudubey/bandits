@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 class NetworkBandit:
 
     @staticmethod
-    def generateGraph(n=100, graph_type='er', **kwargs):
+    def generateRandomGraph(n=100, graph_type='er', **kwargs):
         ''' Generate a random graph with n nodes '''
         if graph_type == 'er':
             # generate erdos-renyi graph
@@ -16,6 +16,25 @@ class NetworkBandit:
                 return nx.gnp_random_graph(n, kwargs['p'])
             else:
                 return nx.gnp_random_graph(n, 1)
+        elif graph_type == 'complete':
+            return nx.complete_graph(n)
+
+    @staticmethod
+    def generateEpsGraph(n=100, eps=0.1, mu_min=0, mu_max=1, init_graph=None):
+        '''Generate a graph by first initializing means and truncating edges'''
+
+        base_graph = init_graph
+        if not init_graph:
+            base_graph = nx.complete_graph(n)
+
+        means = np.random.uniform(mu_min, mu_max, size=(n, 1))
+
+        for src in range(n):
+            for dest in range(src+1, n):
+                if np.abs(means[src] - means[dest]) > eps:
+                    base_graph.remove_edge(src, dest)
+
+        return base_graph, means
 
     @staticmethod
     def assignCliques(graph):
@@ -56,45 +75,72 @@ class NetworkBandit:
         return clique_map, selected_cliques
 
     def __init__(
-            self, num_agents, num_arms, graphs, mu_min=0,
+            self, num_agents, num_arms, base_graphs=None, mu_min=0,
             mu_max=1, dist='gaussian', eps=None, **kwargs):
 
-        assert num_arms == len(graphs)
         assert mu_max >= mu_min
         assert eps >= 0 and eps <= mu_max - mu_min
 
         self.num_agents = num_agents
         self.num_arms = num_arms
-        self.graphs = graphs
-
-        clique_complete = zip(
-            *[NetworkBandit.assignCliques(g) for g in self.graphs])
-        self.cmap = clique_complete[0]
-        self.cliques = clique_complete[1]
 
         if eps:
-            # means are network bounded
+            #There is a closeness constraint on the means.
+            self.bandit_type = 'bounded'
             if type(eps) is not list:
                 eps = [eps]*self.num_arms
 
             assert type(eps) is list
             self.eps = eps
-            self.bandit_type = 'bounded'
+
+        else:
+            # There are no closeness constraints on the means.
+            self.bandit_type = 'free'
+            if base_graphs:
+                assert num_arms == len(base_graphs)
+                self.graphs = base_graphs
+
+            else:
+                self.graphs = []
+                for k in range(self.num_arms):
+                    if 'graph_type' not in kwargs:
+                        kwargs['graph_type'] = 'complete'
+
+                    self.graphs.append(
+                        NetworkBandit.generateRandomGraph(
+                            self.num_agents, kwargs))
+
+
+
+        if eps:
 
             temp_means = None
             for arm in range(self.num_arms):
                 this_arm_means = {}
                 print(self.graphs[arm].edges)
-                print(list(nx.bfs_edges(self.graphs[arm], 0)))
-                for node in range(self.num_agents):
-                    if node not in this_arm_means:
-                        this_arm_means[node] =\
-                            np.random.uniform(mu_min, mu_max)
-                    for dest_node in self.graphs[arm].neighbors(node):
-                        if dest_node not in this_arm_means:
-                            this_arm_means[dest_node] =\
-                                this_arm_means[node] + np.random.uniform(
-                                    -self.eps[arm]*0.5, self.eps[arm]*0.5)
+                edge_list = list(nx.bfs_edges(self.graphs[arm], 0))
+
+                def bfs_assign(edge_list, start_idx, depth, key_store, base_value):
+                    neighbors = [x[1] for x in edge_list if x[0] == start_idx]
+
+                    if start_idx not in key_store:
+                        key_store[start_idx] = base_value + np.random.uniform(
+                            -self.eps[arm], self.eps[arm])
+
+                    for neighbor in neighbors:
+                        bfs_assign(edge_list, neighbor, depth+1, key_store, key_store[start_idx])
+
+                bfs_assign(edge_list, 0, 0, this_arm_means, np.random.uniform(mu_min, mu_max))
+                print(this_arm_means)
+                # for node in range(self.num_agents):
+                #     if node not in this_arm_means:
+                #         this_arm_means[node] =\
+                #             np.random.uniform(mu_min, mu_max)
+                #     for dest_node in self.graphs[arm].neighbors(node):
+                #         if dest_node not in this_arm_means:
+                #             this_arm_means[dest_node] =\
+                #                 this_arm_means[node] + np.random.uniform(
+                #                     -self.eps[arm]*0.5, self.eps[arm]*0.5)
                 means_transpose =\
                     [this_arm_means[x] for x in range(self.num_agents)]
                 this_arm_means = np.expand_dims(np.asarray(means_transpose), 0)
@@ -145,7 +191,7 @@ class NetworkAgent:
 
 if __name__ == '__main__':
 
-    graphs = [NetworkBandit.generateGraph(5, p=0.5) for _ in range(1)]
-    G = NetworkBandit(5, 1, graphs, eps=0.1)
+    graphs = [NetworkBandit.generateGraph(10, p=0.5) for _ in range(1)]
+    G = NetworkBandit(10, 1, graphs, eps=0.1)
 
     print(G.verifyInit())
