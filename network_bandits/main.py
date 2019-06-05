@@ -1,8 +1,5 @@
 import numpy as np
 import networkx as nx
-# import matplotlib
-# matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 
 class NetworkBandit:
@@ -24,13 +21,18 @@ class NetworkBandit:
         '''Generate a graph by first initializing means and truncating edges'''
 
         base_graph = init_graph
-        if not init_graph:
-            base_graph = nx.complete_graph(n)
-
         means = np.random.uniform(mu_min, mu_max, size=(n, 1))
 
-        for src in range(n):
-            for dest in range(src+1, n):
+        if not init_graph:
+            base_graph = nx.complete_graph(n)
+            for src in range(n):
+                for dest in range(src+1, n):
+                    if np.abs(means[src] - means[dest]) > eps:
+                        base_graph.remove_edge(src, dest)
+        else:
+            edge_set = list(base_graph.edges)[:]
+            for edge in edge_set:
+                src, dest = edge
                 if np.abs(means[src] - means[dest]) > eps:
                     base_graph.remove_edge(src, dest)
 
@@ -83,15 +85,36 @@ class NetworkBandit:
 
         self.num_agents = num_agents
         self.num_arms = num_arms
+        self.graphs = []
+        self.means = None
+        self.mu_min = mu_min
+        self.mu_max = mu_max
+        self.dist = dist
 
         if eps:
-            #There is a closeness constraint on the means.
+            # There is a closeness constraint on the means.
             self.bandit_type = 'bounded'
             if type(eps) is not list:
                 eps = [eps]*self.num_arms
 
             assert type(eps) is list
             self.eps = eps
+            for k in range(self.num_arms):
+                if base_graphs is not None:
+                    this_graph, this_means =\
+                        NetworkBandit.generateEpsGraph(
+                            self.num_agents, self.eps[k], mu_min, mu_max,
+                            base_graphs[k])
+                else:
+                    this_graph, this_means =\
+                        NetworkBandit.generateEpsGraph(
+                            self.num_agents, self.eps[k], mu_min, mu_max)
+                self.graphs.append(this_graph)
+
+                if self.means is None:
+                    self.means = this_means
+                else:
+                    self.means = np.concatenate((self.means, this_means), 1)
 
         else:
             # There are no closeness constraints on the means.
@@ -110,60 +133,9 @@ class NetworkBandit:
                         NetworkBandit.generateRandomGraph(
                             self.num_agents, kwargs))
 
-
-
-        if eps:
-
-            temp_means = None
-            for arm in range(self.num_arms):
-                this_arm_means = {}
-                print(self.graphs[arm].edges)
-                edge_list = list(nx.bfs_edges(self.graphs[arm], 0))
-
-                def bfs_assign(edge_list, start_idx, depth, key_store, base_value):
-                    neighbors = [x[1] for x in edge_list if x[0] == start_idx]
-
-                    if start_idx not in key_store:
-                        key_store[start_idx] = base_value + np.random.uniform(
-                            -self.eps[arm], self.eps[arm])
-
-                    for neighbor in neighbors:
-                        bfs_assign(edge_list, neighbor, depth+1, key_store, key_store[start_idx])
-
-                bfs_assign(edge_list, 0, 0, this_arm_means, np.random.uniform(mu_min, mu_max))
-                print(this_arm_means)
-                # for node in range(self.num_agents):
-                #     if node not in this_arm_means:
-                #         this_arm_means[node] =\
-                #             np.random.uniform(mu_min, mu_max)
-                #     for dest_node in self.graphs[arm].neighbors(node):
-                #         if dest_node not in this_arm_means:
-                #             this_arm_means[dest_node] =\
-                #                 this_arm_means[node] + np.random.uniform(
-                #                     -self.eps[arm]*0.5, self.eps[arm]*0.5)
-                means_transpose =\
-                    [this_arm_means[x] for x in range(self.num_agents)]
-                this_arm_means = np.expand_dims(np.asarray(means_transpose), 0)
-                if temp_means is not None:
-                    temp_means = np.concatenate(
-                        (temp_means, this_arm_means))
-                else:
-                    temp_means = this_arm_means
-
-            self.means = temp_means.transpose()
-
-        else:
-            # randomly initialize means within the range
-            self.eps = None
-            self.means = []
-            self.bandit_type = 'random'
-            for i in range(self.num_agents):
-                this_means = []
-                for j in range(self.num_arms):
-                    this_means.append(np.random.uniform(mu_min, mu_max))
-                self.means.append(this_means)
-
-            self.means = np.asarray(self.means)
+                self.means = np.random.uniform(
+                    mu_min, mu_max,
+                    (self.num_agents, self.num_arms))
 
     def verifyInit(self):
         # verify if the assignments are all correct
@@ -173,7 +145,6 @@ class NetworkBandit:
             for i, graph in enumerate(self.graphs):
                 for edge in graph.edges:
                     src, dest = edge
-                    print(i, src, dest)
                     edge_ok = np.abs(
                         self.means[src][i] -
                         self.means[dest][i]) <= self.eps[i]
@@ -191,7 +162,9 @@ class NetworkAgent:
 
 if __name__ == '__main__':
 
-    graphs = [NetworkBandit.generateGraph(10, p=0.5) for _ in range(1)]
-    G = NetworkBandit(10, 1, graphs, eps=0.1)
-
-    print(G.verifyInit())
+    graphs = [NetworkBandit.generateRandomGraph(10, p=1) for _ in range(5)]
+    num_edges = sum(len(list(g.edges)) for g in graphs)
+    G = NetworkBandit(10, 5, eps=0.4)
+    num_edges_new = sum(len(list(g.edges)) for g in G.graphs)
+    # print(G.means.shape)
+    print(G.verifyInit(), num_edges, num_edges_new, num_edges - num_edges_new)
