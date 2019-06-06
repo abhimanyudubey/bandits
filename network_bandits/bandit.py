@@ -270,15 +270,17 @@ class NetworkBandit:
     def getNeighborInformation(self, src):
         '''Communicate information about neighbor rewards.'''
 
-        averages, counts = [], []
+        averages, counts, ids = [], []
         for arm in range(self.num_arms):
 
-            arm_averages, arm_counts = [], []
+            arm_averages, arm_counts, arm_ids = [], [], []
             for dest in self.graphs[arm].neighbors(src):
                 arm_averages.append(self.average_rewards[dest][arm])
                 arm_counts.append(self.counts[dest][arm])
+                arm_ids.append(dest)
 
             averages.append(arm_averages)
             counts.append(arm_counts)
+            ids.append(arm_ids)
 
-        return averages, counts
+        return averages, counts, ids
