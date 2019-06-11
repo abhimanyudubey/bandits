@@ -267,17 +267,29 @@ class NetworkBandit:
 
         return best_rewards - obtained_rewards
 
-    def getNeighborInformation(self, src):
+    def getNeighborInformation(self, src, use_clique=False):
         '''Communicate information about neighbor rewards.'''
 
-        averages, counts, ids = [], []
+        if use_clique:
+            if not self.cliques_init:
+                # initialize the largest clique mapping first
+                self.initCliques()
+
+        averages, counts, ids = [], [], []
         for arm in range(self.num_arms):
 
             arm_averages, arm_counts, arm_ids = [], [], []
-            for dest in self.graphs[arm].neighbors(src):
-                arm_averages.append(self.average_rewards[dest][arm])
-                arm_counts.append(self.counts[dest][arm])
-                arm_ids.append(dest)
+
+            if use_clique:
+                for dest in self.cliques[arm][self.clique_map[src]]:
+                    arm_averages.append(self.average_rewards[dest][arm])
+                    arm_counts.append(self.pulls[dest][arm])
+                    arm_ids.append(dest)
+            else:
+                for dest in self.graphs[arm].neighbors(src):
+                    arm_averages.append(self.average_rewards[dest][arm])
+                    arm_counts.append(self.pulls[dest][arm])
+                    arm_ids.append(dest)
 
             averages.append(arm_averages)
             counts.append(arm_counts)
