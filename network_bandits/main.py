@@ -47,43 +47,63 @@ def drawPullMap(output_file, bandits):
 
     plt.clf()
 
+    plt.subplot(1, len(bandits)+1, 1)
+    plt.title('Means')
+    plt.xlabel('Arms = %d' % bandits[0].num_arms)
+    plt.ylabel('Agents = %d' % bandits[0].num_agents)
+    normalized_means = normalize(bandits[0].means, norm='l1')
+    plt.imshow(normalized_means, cmap='hot', interpolation='nearest')
+
     for j, bx in enumerate(bandits):
 
         i = j + 1
         normalized_pulls = normalize(bx.pulls, axis=1, norm='l1')
         normalized_means = normalize(bx.means, norm='l1')
 
-        plt.subplot(len(bandits), 2, 2*i-1)
+        plt.subplot(1, len(bandits)+1, i+1)
+        plt.axis('off')
         plt.imshow(normalized_pulls, cmap='hot', interpolation='nearest')
-        plt.subplot(len(bandits), 2, 2*i)
-        plt.imshow(normalized_means, cmap='hot', interpolation='nearest')
+        plt.title('Normalized Pulls')
+        plt.xlabel('Arms = %d' % bandits[0].num_arms)
+        plt.ylabel('Agents = %d' % bandits[0].num_agents)
 
-    plt.savefig(output_file)
+    plt.savefig(output_file, bbox_inches='tight', dpi=600)
 
 
 if __name__ == '__main__':
 
-    graphs = [bandit.generateRandomGraph(10, p=1) for _ in range(5)]
+    num_agents = 100
+    num_arms = 20
+    num_iters = 2000
+    graphs = [
+        bandit.generateRandomGraph(num_agents, p=1) for _ in range(num_arms)]
     num_edges = sum(len(list(g.edges)) for g in graphs)
     G1 = bandit.NetworkBandit(
-        10, 5, graphs, eps=1, mu_min=0, mu_max=10, sigma=2.5)
+        num_agents, num_arms, graphs, eps=0.5, mu_min=0, mu_max=1, sigma=10)
     G2 = copy.deepcopy(G1)
     G3 = copy.deepcopy(G1)
+    G4 = copy.deepcopy(G1)
 
     random_agents = [
-        agents.RandomAgent(graphs, x, 'gaussian') for x in range(10)]
+        agents.RandomAgent(graphs, x, 'gaussian') for x in range(num_agents)]
     ucb_agents = [
-        agents.BaseUCBAgent(graphs, x, 'gaussian') for x in range(10)]
+        agents.BaseUCBAgent(graphs, x, 'gaussian') for x in range(num_agents)]
     maxucb_agents = [
-        agents.MaxMeanUCBAgent(graphs, x, 'gaussian') for x in range(10)]
+        agents.MaxMeanUCBAgent(
+            graphs, x, 'gaussian') for x in range(num_agents)]
+    ucb2_agents = [
+        agents.UCBoverUCBAgent(
+            graphs, x, 'gaussian', eps=0.2) for x in range(num_agents)]
 
-    random_regret = runExperimentSingleCore(G1, random_agents, 5000)
-    ucb1_regret = runExperimentSingleCore(G2, ucb_agents, 5000)
-    ucbM_regret = runExperimentSingleCore(G3, maxucb_agents, 5000)
+    # random_regret = runExperimentSingleCore(G1, random_agents, num_iters)
+    ucb1_regret = runExperimentSingleCore(G2, ucb_agents, num_iters)
+    ucbM_regret = runExperimentSingleCore(G3, maxucb_agents, num_iters)
+    ucb2_regret = runExperimentSingleCore(G4, ucb2_agents, num_iters)
 
-    # plt.plot(range(5000), random_regret)
-    plt.plot(range(5000), ucb1_regret)
-    plt.plot(range(5000), ucbM_regret)
+    # plt.plot(range(num_iters), random_regret)
+    plt.plot(range(num_iters), ucb1_regret)
+    plt.plot(range(num_iters), ucbM_regret)
+    plt.plot(range(num_iters), ucb2_regret)
     plt.savefig('result.png')
 
-    drawPullMap('result_pulls.png', [G1, G2])
+    drawPullMap('result_pulls.png', [G2, G3, G4])

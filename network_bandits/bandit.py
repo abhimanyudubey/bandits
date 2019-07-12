@@ -112,7 +112,7 @@ class NetworkBandit:
         self.mu_max = mu_max
         self.dist = dist
 
-        if eps:
+        if eps is not None:
             # There is a closeness constraint on the means.
             self.bandit_type = 'bounded'
             if type(eps) is not list:
@@ -240,7 +240,6 @@ class NetworkBandit:
 
     def getRewardSample(self, agent_id, arm):
         ''' Generate rewards for agent (randomly sampled)'''
-
         if self.dist is 'gaussian':
             reward = np.random.normal(
                 self.means[agent_id][arm], self.sigma[agent_id][arm], 1)
@@ -281,7 +280,7 @@ class NetworkBandit:
             arm_averages, arm_counts, arm_ids = [], [], []
 
             if use_clique:
-                for dest in self.cliques[arm][self.clique_map[src]]:
+                for dest in self.cliques[arm][self.clique_map[arm][src]]:
                     arm_averages.append(self.average_rewards[dest][arm])
                     arm_counts.append(self.pulls[dest][arm])
                     arm_ids.append(dest)
