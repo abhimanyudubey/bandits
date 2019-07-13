@@ -1,6 +1,3 @@
-import numpy as np
-import networkx as nx
-from multiprocessing import Pool
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -72,14 +69,14 @@ def drawPullMap(output_file, bandits):
 
 if __name__ == '__main__':
 
-    num_agents = 100
-    num_arms = 20
-    num_iters = 2000
+    num_agents = 30
+    num_arms = 4
+    num_iters = 100000
     graphs = [
         bandit.generateRandomGraph(num_agents, p=1) for _ in range(num_arms)]
     num_edges = sum(len(list(g.edges)) for g in graphs)
     G1 = bandit.NetworkBandit(
-        num_agents, num_arms, graphs, eps=0.5, mu_min=0, mu_max=1, sigma=10)
+        num_agents, num_arms, graphs, eps=0.1, mu_min=0, mu_max=1, sigma=1000)
     G2 = copy.deepcopy(G1)
     G3 = copy.deepcopy(G1)
     G4 = copy.deepcopy(G1)
