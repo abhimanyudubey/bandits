@@ -1,4 +1,5 @@
 import numpy as np
+import pymc3 as pm
 
 
 def getConfidenceBound(dist_type, counts, sigma=1, **kwargs):
@@ -252,3 +253,98 @@ class UCBoverUCBAgent(NetworkAgent):
             self.nbr_avgs = kwargs['nbr_avgs']
             self.nbr_counts = kwargs['nbr_cnts']
             self.nbr_ids = kwargs['nbr_ids']
+
+
+class WeightedExpUCBAgent(NetworkAgent):
+
+    def __init__(self, graphs, id, dist, **kwargs):
+        NetworkAgent.__init__(self, graphs, id, dist)
+        if 'eps' in kwargs:
+            self.eps = kwargs['eps']
+
+    def play(self):
+
+        if not self.uses_clique:
+            self.uses_clique = True
+
+        if self.num_iters <= self.arms:
+            self.played_arm = (self.num_iters - 1) % self.arms
+
+        elif self.nbr_ids is not None:
+
+            conf_values = []
+            for arm, (avgx, cntx, idx) in enumerate(
+                    zip(self.nbr_avgs, self.nbr_counts, self.nbr_ids)):
+                # calculate the confidence values based on each arm
+                w_arm = []
+                for avgxx, cntxx in zip(avgx, cntx):
+                    w_i = np.exp(-np.abs(cntxx - self.samples[arm]))
+                sigma_f = self.sigma[arm]
+
+                scale_factor = 1.0/(len(self.nbr_ids[arm])+1)
+                base_conf = scale_factor * (
+                    self.means[arm] +
+                    getConfidenceBound(
+                        self.dist, self.samples[arm], self.sigma[arm]))
+                final_conf = 0.0
+                final_conf += base_conf
+                eps_factor = self.eps/len(self.nbr_ids[arm])
+                for avgxx, cntxx in zip(avgx, cntx):
+                    ucb_other = avgxx + getConfidenceBound(
+                        self.dist, cntxx, self.sigma[arm])
+                    if ucb_other*scale_factor + eps_factor < base_conf:
+                        final_conf += ucb_other*scale_factor + eps_factor
+                    else:
+                        final_conf += base_conf
+                conf_values.append(final_conf)
+
+            self.played_arm = np.argmax(conf_values)
+
+        else:
+            # no neighbors, use regular UCB
+            if self.dist == 'bernoulli':
+                conf_values = self.means +\
+                    np.sqrt(np.log(self.num_iters)*0.5/self.samples)
+            elif self.dist == 'gaussian':
+                conf_values = self.means +\
+                    np.sqrt(np.log(self.num_iters)*2/self.samples)
+            # TODO: Implement alpha-stable version of UCB.
+
+            self.played_arm = np.argmax(conf_values)
+
+        self.num_iters += 1
+        return self.played_arm
+
+    def update(self, reward, **kwargs):
+
+        self.means[self.played_arm] =\
+            (self.means[self.played_arm]*self.samples[self.played_arm] +
+             reward)/(self.samples[self.played_arm]+1)
+        self.samples[self.played_arm] += 1
+        if 'nbr_avgs' in kwargs:
+            self.nbr_avgs = kwargs['nbr_avgs']
+            self.nbr_counts = kwargs['nbr_cnts']
+            self.nbr_ids = kwargs['nbr_ids']
+
+
+class DeltaThompsonSamplingAgent(NetworkAgent):
+
+    def __init__(self, graphs, id, dist, **kwargs):
+        NetworkAgent.__init__(self, graphs, id, dist)
+        if 'eps' in kwargs:
+            self.eps = kwargs['eps']
+
+        if 'dist' in kwargs:
+            dist_type = kwargs['dist']
+            if dist_type == 'gaussian':
+                if 'mu' in kwargs:
+                    self.prior_mean = kwargs['mu']
+                else:
+                    self.prior_mean = 0.0
+
+                if 'sigma' in kwargs:
+                    self.prior_variance = kwargs['sigma']
+                else:
+                    self.prior_variance = 1.0
+
+    def play(self):
