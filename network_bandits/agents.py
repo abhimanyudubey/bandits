@@ -1,5 +1,4 @@
 import numpy as np
-import pymc3 as pm
 
 
 def getConfidenceBound(dist_type, counts, sigma=1, **kwargs):
@@ -327,6 +326,7 @@ class WeightedExpUCBAgent(NetworkAgent):
             self.nbr_ids = kwargs['nbr_ids']
 
 
+# Gaussian Thompson Sampling by accounting for differences
 class DeltaThompsonSamplingAgent(NetworkAgent):
 
     def __init__(self, graphs, id, dist, **kwargs):
@@ -334,34 +334,70 @@ class DeltaThompsonSamplingAgent(NetworkAgent):
         if 'eps' in kwargs:
             self.eps = kwargs['eps']
 
-        dist_type = kwargs['dist']
-        if dist_type == 'gaussian':
-            if 'mu' in kwargs:
-                self.prior_mean = kwargs['mu']
-            else:
-                self.prior_mean = 0.0
+        if 'prior_mu' in kwargs:
+            self.prior_mu = np.full_like(self.means, kwargs['prior_mu'])
+        else:
+            self.prior_mu = np.full_like(self.means, 0.0)
 
-            if 'sigma' in kwargs:
-                self.prior_sigma = kwargs['sigma']
-            else:
-                self.prior_sigma = 1.0
+        if 'prior_sigma' in kwargs:
+            self.prior_sigma = np.full_like(self.sigma, kwargs['prior_sigma'])
+        else:
+            self.prior_sigma = np.full_like(self.sigma, self.eps)
 
-        # create pymc3 model
-        self.prior_model = pm.Model()
-        with self.prior_model:
-            # just modeling the prior of the mean
-            self.priors_mean = [
-                pm.Normal('mu_arm_%d' % i, self.prior_mean, self.prior_sigma)
-                for i in range(0, self.arms)]
-            self.priors_delta = [[
-                pm.Normal('delta_%d_arm_%d' % (i, j), 0, self.eps) for
-                j in range(0, self.arms)] for i in
-                range(0, len(self.neighbors))]
+        if 'delta_ts' in kwargs:
+            self.delta_ts = kwargs['delta_ts']
+        else:
+            self.delta_ts = False
 
     def play(self):
 
         self.num_iters += 1
+        if not self.uses_clique:
+            self.uses_clique = True
 
-        with self.prior_model:
-            if self.dist == 'gaussian':
-                posterior_means = [pm.sample()]
+        post_mu, post_sigma = [], []
+        if self.nbr_ids is not None and self.delta_ts:
+
+            for arm, (avgx, cntx, idx) in enumerate(
+                    zip(self.nbr_avgs, self.nbr_counts, self.nbr_ids)):
+
+                post_mu_arm = self.prior_mu[arm] +\
+                    self.means[arm]*self.samples[arm]/(self.sigma[arm]**2)
+                post_sigma_inv_arm = 1.0/(self.prior_sigma[arm]**2) +\
+                    self.samples[arm]/(self.sigma[arm]**2)
+
+                for avgxx, cntxx in zip(avgx, cntx):
+                    kappa_i_arm = cntxx*cntxx*1.0/(
+                        cntxx + (self.eps/self.sigma[arm])**2)
+                    n_eff_arm = cntxx - kappa_i_arm
+
+                    post_mu_arm += \
+                        n_eff_arm*avgxx/(self.sigma[arm]**2)
+                    post_sigma_inv_arm += \
+                        n_eff_arm/(self.sigma[arm]**2)
+
+                post_mu.append(post_mu_arm*1.0/post_sigma_inv_arm)
+                post_sigma.append(post_sigma_inv_arm**(-1))
+
+        else:
+            # no neighbors, do regular Thompson Sampling
+            post_mu = self.prior_mu + self.means
+            post_sigma = self.prior_sigma + self.sigma/self.samples
+
+        posterior_samples = []
+        for mu, sigma in zip(post_mu, post_sigma):
+            posterior_samples.append(np.random.normal(mu, sigma))
+
+        self.played_arm = np.argmax(posterior_samples)
+        return self.played_arm
+
+    def update(self, reward, **kwargs):
+
+        self.means[self.played_arm] =\
+            (self.means[self.played_arm]*self.samples[self.played_arm] +
+             reward)/(self.samples[self.played_arm]+1)
+        self.samples[self.played_arm] += 1
+        if 'nbr_avgs' in kwargs:
+            self.nbr_avgs = kwargs['nbr_avgs']
+            self.nbr_counts = kwargs['nbr_cnts']
+            self.nbr_ids = kwargs['nbr_ids']
