@@ -334,17 +334,34 @@ class DeltaThompsonSamplingAgent(NetworkAgent):
         if 'eps' in kwargs:
             self.eps = kwargs['eps']
 
-        if 'dist' in kwargs:
-            dist_type = kwargs['dist']
-            if dist_type == 'gaussian':
-                if 'mu' in kwargs:
-                    self.prior_mean = kwargs['mu']
-                else:
-                    self.prior_mean = 0.0
+        dist_type = kwargs['dist']
+        if dist_type == 'gaussian':
+            if 'mu' in kwargs:
+                self.prior_mean = kwargs['mu']
+            else:
+                self.prior_mean = 0.0
 
-                if 'sigma' in kwargs:
-                    self.prior_variance = kwargs['sigma']
-                else:
-                    self.prior_variance = 1.0
+            if 'sigma' in kwargs:
+                self.prior_sigma = kwargs['sigma']
+            else:
+                self.prior_sigma = 1.0
+
+        # create pymc3 model
+        self.prior_model = pm.Model()
+        with self.prior_model:
+            # just modeling the prior of the mean
+            self.priors_mean = [
+                pm.Normal('mu_arm_%d' % i, self.prior_mean, self.prior_sigma)
+                for i in range(0, self.arms)]
+            self.priors_delta = [[
+                pm.Normal('delta_%d_arm_%d' % (i, j), 0, self.eps) for
+                j in range(0, self.arms)] for i in
+                range(0, len(self.neighbors))]
 
     def play(self):
+
+        self.num_iters += 1
+
+        with self.prior_model:
+            if self.dist == 'gaussian':
+                posterior_means = [pm.sample()]
