@@ -342,7 +342,7 @@ class DeltaThompsonSamplingAgent(NetworkAgent):
         if 'prior_sigma' in kwargs:
             self.prior_sigma = np.full_like(self.sigma, kwargs['prior_sigma'])
         else:
-            self.prior_sigma = np.full_like(self.sigma, self.eps)
+            self.prior_sigma = self.sigma
 
         if 'delta_ts' in kwargs:
             self.delta_ts = kwargs['delta_ts']
