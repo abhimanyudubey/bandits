@@ -72,11 +72,11 @@ def drawPullMap(output_file, bandits):
 if __name__ == '__main__':
 
     regret_ucb1, regret_ucbM, regret_ucb2 = None, None, None
-    rounds = 50
+    rounds = 10
     min_agents, max_agents = 10, 40
     min_arms, max_arms = 8, 8
-    num_iters = 500
-    eps=0.025
+    num_iters = 5000
+    eps = 0.025
     for round in range(rounds):
 
         num_agents = random.choice(range(min_agents, max_agents+1))
@@ -84,19 +84,28 @@ if __name__ == '__main__':
 
         this_round_regret = []
         graphs = [
-            bandit.generateRandomGraph(num_agents, p=1) for _ in range(num_arms)]
+            bandit.generateRandomGraph(num_agents, p=1)
+            for _ in range(num_arms)]
         num_edges = sum(len(list(g.edges)) for g in graphs)
         G1 = bandit.NetworkBandit(
-            num_agents, num_arms, graphs, eps=eps, mu_min=0, mu_max=1, sigma=10)
+            num_agents,
+            num_arms,
+            graphs,
+            eps=eps,
+            mu_min=0,
+            mu_max=1,
+            sigma=1)
         G2 = copy.deepcopy(G1)
         G3 = copy.deepcopy(G1)
         G4 = copy.deepcopy(G1)
         G5 = copy.deepcopy(G1)
 
         random_agents = [
-            agents.RandomAgent(graphs, x, 'gaussian') for x in range(num_agents)]
+            agents.RandomAgent(graphs, x, 'gaussian') for x in
+            range(num_agents)]
         ucb_agents = [
-            agents.BaseUCBAgent(graphs, x, 'gaussian') for x in range(num_agents)]
+            agents.BaseUCBAgent(graphs, x, 'gaussian') for x in
+            range(num_agents)]
         maxucb_agents = [
             agents.MaxMeanUCBAgent(
                 graphs, x, 'gaussian') for x in range(num_agents)]
@@ -105,7 +114,12 @@ if __name__ == '__main__':
                 graphs, x, 'gaussian', eps=eps) for x in range(num_agents)]
         deltats_agents = [
             agents.DeltaThompsonSamplingAgent(
-                graphs, x, 'gaussian', eps=eps) for x in range(num_agents)]
+                graphs,
+                x,
+                'gaussian',
+                eps=eps,
+                delta_ts=True)
+            for x in range(num_agents)]
 
         ucb1_regret = runExperimentSingleCore(G2, ucb_agents, num_iters)
         ucbM_regret = runExperimentSingleCore(G3, maxucb_agents, num_iters)
@@ -125,7 +139,8 @@ if __name__ == '__main__':
             regret_ucbM = np.concatenate(
                 (regret_ucbM, np.expand_dims(np.array(ucbM_regret), 0)), 0)
             regret_deltats = np.concatenate(
-                (regret_deltats, np.expand_dims(np.array(ucbM_regret), 0)), 0)
+                (regret_deltats,
+                    np.expand_dims(np.array(deltats_regret), 0)), 0)
 
         print('Completed round %d.' % (round+1))
 
@@ -152,7 +167,7 @@ if __name__ == '__main__':
     plt.fill_between(
         range(num_iters), mean_ucbM-std_ucbM, mean_ucbM+std_ucbM,
         color='red', alpha=0.2)
-    plt.plot(range(num_iters), mean_dets, label='UCB-M', color='red')
+    plt.plot(range(num_iters), mean_dets, label='delta-TS', color='cyan')
     plt.fill_between(
         range(num_iters), mean_dets-std_dets, mean_dets+std_dets,
         color='red', alpha=0.2)

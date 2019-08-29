@@ -356,7 +356,10 @@ class DeltaThompsonSamplingAgent(NetworkAgent):
             self.uses_clique = True
 
         post_mu, post_sigma = [], []
-        if self.nbr_ids is not None and self.delta_ts:
+        if self.num_iters <= self.arms:
+            self.played_arm = (self.num_iters - 1) % self.arms
+
+        elif self.nbr_ids is not None and self.delta_ts:
 
             for arm, (avgx, cntx, idx) in enumerate(
                     zip(self.nbr_avgs, self.nbr_counts, self.nbr_ids)):
@@ -379,16 +382,22 @@ class DeltaThompsonSamplingAgent(NetworkAgent):
                 post_mu.append(post_mu_arm*1.0/post_sigma_inv_arm)
                 post_sigma.append(post_sigma_inv_arm**(-1))
 
+            posterior_samples = []
+            for mu, sigma in zip(post_mu, post_sigma):
+                posterior_samples.append(np.random.normal(mu, sigma))
+
+            self.played_arm = np.argmax(posterior_samples)
+
         else:
             # no neighbors, do regular Thompson Sampling
             post_mu = self.prior_mu + self.means
             post_sigma = self.prior_sigma + self.sigma/self.samples
 
-        posterior_samples = []
-        for mu, sigma in zip(post_mu, post_sigma):
-            posterior_samples.append(np.random.normal(mu, sigma))
+            posterior_samples = []
+            for mu, sigma in zip(post_mu, post_sigma):
+                posterior_samples.append(np.random.normal(mu, sigma))
 
-        self.played_arm = np.argmax(posterior_samples)
+            self.played_arm = np.argmax(posterior_samples)
         return self.played_arm
 
     def update(self, reward, **kwargs):
