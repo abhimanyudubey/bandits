@@ -76,6 +76,7 @@ if __name__ == '__main__':
     min_agents, max_agents = 10, 40
     min_arms, max_arms = 8, 8
     num_iters = 500
+    eps=0.025
     for round in range(rounds):
 
         num_agents = random.choice(range(min_agents, max_agents+1))
@@ -86,10 +87,11 @@ if __name__ == '__main__':
             bandit.generateRandomGraph(num_agents, p=1) for _ in range(num_arms)]
         num_edges = sum(len(list(g.edges)) for g in graphs)
         G1 = bandit.NetworkBandit(
-            num_agents, num_arms, graphs, eps=0.025, mu_min=0, mu_max=1, sigma=10)
+            num_agents, num_arms, graphs, eps=eps, mu_min=0, mu_max=1, sigma=10)
         G2 = copy.deepcopy(G1)
         G3 = copy.deepcopy(G1)
         G4 = copy.deepcopy(G1)
+        G5 = copy.deepcopy(G1)
 
         random_agents = [
             agents.RandomAgent(graphs, x, 'gaussian') for x in range(num_agents)]
@@ -100,16 +102,21 @@ if __name__ == '__main__':
                 graphs, x, 'gaussian') for x in range(num_agents)]
         ucb2_agents = [
             agents.UCBoverUCBAgent(
-                graphs, x, 'gaussian', eps=0.2) for x in range(num_agents)]
+                graphs, x, 'gaussian', eps=eps) for x in range(num_agents)]
+        deltats_agents = [
+            agents.DeltaThompsonSamplingAgent(
+                graphs, x, 'gaussian', eps=eps) for x in range(num_agents)]
 
         ucb1_regret = runExperimentSingleCore(G2, ucb_agents, num_iters)
         ucbM_regret = runExperimentSingleCore(G3, maxucb_agents, num_iters)
         ucb2_regret = runExperimentSingleCore(G4, ucb2_agents, num_iters)
+        deltats_regret = runExperimentSingleCore(G5, deltats_agents, num_iters)
 
         if regret_ucb1 is None:
             regret_ucb1 = np.expand_dims(np.array(ucb1_regret), 0)
             regret_ucb2 = np.expand_dims(np.array(ucb2_regret), 0)
             regret_ucbM = np.expand_dims(np.array(ucbM_regret), 0)
+            regret_deltats = np.expand_dims(np.array(deltats_regret), 0)
         else:
             regret_ucb1 = np.concatenate(
                 (regret_ucb1, np.expand_dims(np.array(ucb1_regret), 0)), 0)
@@ -117,16 +124,20 @@ if __name__ == '__main__':
                 (regret_ucb2, np.expand_dims(np.array(ucb2_regret), 0)), 0)
             regret_ucbM = np.concatenate(
                 (regret_ucbM, np.expand_dims(np.array(ucbM_regret), 0)), 0)
+            regret_deltats = np.concatenate(
+                (regret_deltats, np.expand_dims(np.array(ucbM_regret), 0)), 0)
 
         print('Completed round %d.' % (round+1))
 
     mean_ucb1 = np.mean(regret_ucb1, axis=0)
     mean_ucb2 = np.mean(regret_ucb2, axis=0)
     mean_ucbM = np.mean(regret_ucbM, axis=0)
+    mean_dets = np.mean(regret_deltats, axis=0)
 
     std_ucb1 = np.std(regret_ucb1, axis=0)
     std_ucbM = np.std(regret_ucbM, axis=0)
     std_ucb2 = np.std(regret_ucb2, axis=0)
+    std_dets = np.std(regret_deltats, axis=0)
     # plt.plot(range(num_iters), random_regret)
 
     plt.plot(range(num_iters), list(mean_ucb1), label='UCB-1', color='blue')
@@ -140,6 +151,10 @@ if __name__ == '__main__':
     plt.plot(range(num_iters), mean_ucbM, label='UCB-M', color='red')
     plt.fill_between(
         range(num_iters), mean_ucbM-std_ucbM, mean_ucbM+std_ucbM,
+        color='red', alpha=0.2)
+    plt.plot(range(num_iters), mean_dets, label='UCB-M', color='red')
+    plt.fill_between(
+        range(num_iters), mean_dets-std_dets, mean_dets+std_dets,
         color='red', alpha=0.2)
     plt.legend(loc='upper left')
     plt.savefig('result.png')
