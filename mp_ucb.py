@@ -389,24 +389,18 @@ if __name__ == '__main__':
     threads = []
     thread_manager = multiprocessing.Manager()
 
-    regret_dict = thread_manager.list()
-    for _ in range(4):
-        regret_dict.append({})
+    regret_dict_base = thread_manager.list()
 
     plt.figure()
 
-    def exec_thread(n, graph, graph_params, env, T, g, k, regret_dict):
+    def exec_thread(n, graph, graph_params, env, T, g, k, regret_dict_base):
         manager = Manager(
             n, g, alg_type, graph=graph, graph_params=graph_params)
 
         manager.create_agents(env)
         total_r, max_r, min_r = manager.run(T, env)[1]
 
-        if g not in regret_dict[k]:
-            regret_dict[k][g] = [[], [], []]
-        regret_dict[k][g][0].append(total_r)
-        regret_dict[k][g][1].append(max_r)
-        regret_dict[k][g][2].append(min_r)
+        regret_dict_base.append((k, g, total_r, max_r, min_r))
 
         print('Done', round, g, k)
         # return k, g, total_r, max_r, min_r
@@ -442,13 +436,27 @@ if __name__ == '__main__':
 
                 process = multiprocessing.Process(
                     target=exec_thread,
-                    args=[n, graph, graph_params, env, T, g, k, regret_dict])
+                    args=[
+                        n, graph, graph_params, env, T, g, k,
+                        regret_dict_base])
                 process.daemon = True
                 process.start()
                 threads.append(process)
 
     for process in threads:
         process.join()
+
+    regret_dict = []
+    for _ in range(4):
+        regret_dict.append({})
+
+    for elem in regret_dict_base:
+        k, g, total_r, max_r, min_r = elem
+        if g not in regret_dict[k]:
+            regret_dict[k][g] = [[], [], []]
+        regret_dict[k][g][0].append(total_r)
+        regret_dict[k][g][1].append(max_r)
+        regret_dict[k][g][2].append(min_r)
 
     print(regret_dict)
     # averaging now
