@@ -409,7 +409,7 @@ if __name__ == '__main__':
         regret_dict[k][g][2].append(min_r)
 
         print('Done', round, g, k)
-        return k, g, total_r, max_r, min_r
+        # return k, g, total_r, max_r, min_r
 
     managers = []
     for round in range(num_rounds):
