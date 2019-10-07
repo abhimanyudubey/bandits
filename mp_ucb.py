@@ -6,9 +6,12 @@ import math
 from scipy.special import gamma
 import argparse
 import multiprocessing
+import cPickle as pkl
+import datetime
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
 
 USE_RANDOM_SAMPLER = False
 if USE_RANDOM_SAMPLER:
@@ -37,16 +40,19 @@ def cms_alpha(_alpha, _beta, mu, sigma):
     return float(z*sigma + mu)
 
 
-def generateRandomGraph(n=100, graph_type='er', **kwargs):
-    ''' Generate a random graph with n nodes '''
+def generate_connected_graph(n, graph_type='er'):
+    # we generate a connected graph by first generating a random path graph and
+    # ensuring it is connected
+    base_path_graph = nx.path_graph(n)
+
     if graph_type == 'er':
-        # generate erdos-renyi graph
-        if 'p' in kwargs:
-            return nx.gnp_random_graph(n, kwargs['p'])
-        else:
-            return nx.gnp_random_graph(n, 1)
-    elif graph_type == 'complete':
-        return nx.complete_graph(n)
+        main_graph = nx.gnp_random_graph(n, 0.05)
+
+    for edge in base_path_graph:
+        if not main_graph.has_edge(*edge):
+            main_graph.add_edge(*edge)
+
+    return main_graph
 
 
 def trimmed_mean(samples, u, eps, delta):
@@ -239,8 +245,7 @@ class Manager:
             graph=None, graph_params=None):
         # generate graph first
         if graph is None:
-            graph = \
-                generateRandomGraph(N, graph_params['type'], **graph_params)
+            graph = generate_connected_graph(N, 'er')
 
         power_graph = nx.power(graph, g)
         leaders, leader_assignment = [], []
@@ -361,8 +366,8 @@ class Manager:
     def get_regret(self, env):
 
         top_mu = np.max(env.means)
-        sum_rewards = self.rounds*self.n*top_mu\
-            - sum(x.self_sum for x in self.agents)
+        sum_rewards = self.rounds*top_mu\
+            - 1.0/self.n*sum(x.self_sum for x in self.agents)
         max_regret = self.rounds*top_mu - min(x.self_sum for x in self.agents)
         min_regret = self.rounds*top_mu - max(x.self_sum for x in self.agents)
 
@@ -370,65 +375,146 @@ class Manager:
 
     def run(self, T, env):
 
-        regret = []
+        regrets = {}
+        regrets['min_regrets'] = []
+        regrets['max_regrets'] = []
+        regrets['avg_regrets'] = []
+
         for t in range(T):
-            regret.append(self.round(env))
-        return regret, self.round(env)
+            avg_r, max_r, min_r = self.round(env)
+            regrets['min_regrets'].append(min_r)
+            regrets['max_regrets'].append(max_r)
+            regrets['avg_regrets'].append(avg_r)
+
+        return regrets
 
 
 if __name__ == '__main__':
 
-    n = 100
-    num_rounds = 10
-    T = 1000
-    K = 20
-    env = Environment(K, 2, is_heavy_tailed=False)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-e', '--experiment_type', type=int)
+    parser.add_argument(
+        '-n', '--num_agents', type=int, required=False, default=50)
+    parser.add_argument(
+        '-t', '--graph-type', type=str, required=False, default='er')
+    parser.add_argument(
+        '-g', '--gamma', type=int, required=False, default=None)
 
-    graph_params = {}
-    graph_params['choice_type'] = 'degree'
+    args = parser.parse_args()
+    if args.g is None:
+        args.g == math.ceil(math.sqrt(args.n))
+    exp_type = args.e
+
     threads = []
     thread_manager = multiprocessing.Manager()
-
     regret_dict_base = thread_manager.list()
 
-    plt.figure()
-
-    def exec_thread(n, graph, graph_params, env, T, g, k, regret_dict_base):
+    def exec_thread(
+            n, graph, graph_params, env, T, g, k, gt, regret_dict_base):
         manager = Manager(
             n, g, alg_type, graph=graph, graph_params=graph_params)
 
         manager.create_agents(env)
-        total_r, max_r, min_r = manager.run(T, env)[1]
+        regrets = manager.run(T, env)
 
-        regret_dict_base.append((k, g, total_r, max_r, min_r))
+        regret_dict_base.append((k, g, n, gt, regrets))
 
         print('Done', round, g, k)
-        # return k, g, total_r, max_r, min_r
 
-    managers = []
-    for round in range(num_rounds):
+    if exp_type == 1:
+        # compare regret over different connectivity
+        n = args.n
+        num_rounds = 10
+        T = 1000
+        K = 20
 
-        sparsity = np.random.uniform()
-        generated_connected = False
-        while not generated_connected:
-            graph = nx.gnp_random_graph(n, sparsity)
-            try:
-                diam = nx.diameter(graph)
-                generated_connected = True
-            except nx.exception.NetworkXError:
-                generated_connected = False
+        env = Environment(K, 2, is_heavy_tailed=False)
 
-        for g in range(1, diam+1):
+        graph_params = {}
+        graph_params['choice_type'] = 'degree'
 
-            for k in range(4):
+        for round in range(num_rounds):
+            graph = generate_connected_graph(n, args.t)
+            diam = nx.diameter(graph)
 
-                if k == 0:
+            for g in range(1, diam+1):
+
+                for k in [
+                        'ftl_degree',
+                        'ftl_distance',
+                        'ftl_bc',
+                        'decentralized']:
+
+                    if k == 'ftl_degree':
+                        alg_type = 'ftl'
+                        graph_params['node_weight'] = 'degree'
+                    elif k == 'ftl_distance':
+                        alg_type = 'ftl'
+                        graph_params['node_weight'] = 'distance'
+                    elif k == 'ftl_bc':
+                        alg_type = 'ftl'
+                        graph_params['node_weight'] = 'bc'
+                    else:
+                        alg_type = 'decentralized'
+
+                    process = multiprocessing.Process(
+                        target=exec_thread,
+                        args=[
+                            n, graph, graph_params, env, T, g, k, args.t,
+                            regret_dict_base])
+                    process.daemon = True
+                    process.start()
+                    threads.append(process)
+
+        for process in threads:
+            process.join()
+
+        regret_dict = {}
+        for k in [
+                'ftl_degree',
+                'ftl_distance',
+                'ftl_bc',
+                'decentralized']:
+            regret_dict[k] = {}
+
+        for elem in regret_dict_base:
+            k, g, nn, gt, regrets_round = elem
+            if g not in regret_dict[k]:
+                regret_dict[k][g] = regrets_round
+
+        dt = '{date:%Y-%m-%d_%H:%M:%S}.pkl'.format(
+            date=datetime.datetime.now())
+        output_file = 'exp1_%d_%s_%s' % (args.n, args.t, dt)
+        pkl.dump(
+            (regret_dict, args.t, n), open(output_file, 'wb'),
+            protocol=pkl.HIGHEST_PROTOCOL)
+
+    if exp_type == 2:
+        n_range = [1, 5, 10, 20, 40, 80, 160, 320]
+        num_rounds = 10
+        T = 1000
+        K = 20
+
+        env = Environment(K, 2, is_heavy_tailed=False)
+
+        graph_params = {}
+        graph_params['choice_type'] = 'degree'
+
+        for n in n_range:
+            graph = generate_connected_graph(n, args.t)
+            diam = nx.diam(graph)
+            g = math.ceil(math.sqrt(n))
+
+            for k in ['ftl_degree', 'ftl_distance', 'ftl_bc', 'decentralized']:
+
+                if k == 'ftl_degree':
                     alg_type = 'ftl'
                     graph_params['node_weight'] = 'degree'
-                elif k == 1:
+                elif k == 'ftl_distance':
                     alg_type = 'ftl'
                     graph_params['node_weight'] = 'distance'
-                elif k == 2:
+                elif k == 'ftl_bc':
                     alg_type = 'ftl'
                     graph_params['node_weight'] = 'bc'
                 else:
@@ -437,41 +523,48 @@ if __name__ == '__main__':
                 process = multiprocessing.Process(
                     target=exec_thread,
                     args=[
-                        n, graph, graph_params, env, T, g, k,
+                        n, graph, graph_params, env, T, g, k, args.t,
                         regret_dict_base])
                 process.daemon = True
                 process.start()
                 threads.append(process)
 
-    for process in threads:
-        process.join()
+        for process in threads:
+            process.join()
 
-    regret_dict = []
-    for _ in range(4):
-        regret_dict.append({})
+        regret_dict = {}
+        for k in [
+                'ftl_degree',
+                'ftl_distance',
+                'ftl_bc',
+                'decentralized']:
+            regret_dict[k] = {}
 
-    for elem in regret_dict_base:
-        k, g, total_r, max_r, min_r = elem
-        if g not in regret_dict[k]:
-            regret_dict[k][g] = [[], [], []]
-        regret_dict[k][g][0].append(total_r)
-        regret_dict[k][g][1].append(max_r)
-        regret_dict[k][g][2].append(min_r)
+        for elem in regret_dict_base:
+            k, g, nn, gt, regrets = elem
+            if nn not in regret_dict[k]:
+                regret_dict[k][nn] = regrets
 
-    print(regret_dict)
-    # averaging now
-    colors = ['red', 'green', 'blue', 'cyan']
-    for algorithm in range(4):
-        diam_vals = sorted(regret_dict[k].keys())
-        plot_avg = [1.0/n*np.sum(
-            regret_dict[algorithm][x][0]) for x in diam_vals]
-        plot_max = [np.sum(
-            regret_dict[algorithm][x][1]) for x in diam_vals]
-        plot_min = [np.sum(
-            regret_dict[algorithm][x][2]) for x in diam_vals]
-        plt.plot(diam_vals, plot_avg, color=colors[algorithm], marker='o')
-        plt.plot(diam_vals, plot_max, color=colors[algorithm], marker='+')
-        plt.plot(diam_vals, plot_min, color=colors[algorithm], marker='.')
+        dt = '{date:%Y-%m-%d_%H:%M:%S}.pkl'.format(
+            date=datetime.datetime.now())
+        output_file = 'exp2_%s_%s' % (args.t, dt)
+        pkl.dump(
+            (regret_dict, args.t), open(output_file, 'wb'),
+            protocol=pkl.HIGHEST_PROTOCOL)
+
+        # averaging now
+        # colors = ['red', 'green', 'blue', 'cyan']
+        # for algorithm in range(4):
+        #     diam_vals = sorted(regret_dict[k].keys())
+        #     plot_avg = [1.0/n*np.sum(
+        #         regret_dict[algorithm][x][0]) for x in diam_vals]
+        #     plot_max = [np.sum(
+        #         regret_dict[algorithm][x][1]) for x in diam_vals]
+        #     plot_min = [np.sum(
+        #         regret_dict[algorithm][x][2]) for x in diam_vals]
+        #     plt.plot(diam_vals, plot_avg, color=colors[algorithm], marker='o')
+        #     plt.plot(diam_vals, plot_max, color=colors[algorithm], marker='+')
+        #     plt.plot(diam_vals, plot_min, color=colors[algorithm], marker='.')
 
     # g = 3
     # T = 800
@@ -515,4 +608,3 @@ if __name__ == '__main__':
     # plt.plot(range(T), regrets2)
     # plt.plot(range(T), regrets3)
     # plt.plot(range(T), regrets4)
-    plt.savefig('output.pdf', dpi=600, bbox_inches='tight')
