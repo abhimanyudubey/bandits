@@ -48,7 +48,7 @@ def generate_connected_graph(n, graph_type='er'):
     if graph_type == 'er':
         main_graph = nx.gnp_random_graph(n, 0.05)
     elif graph_type == 'ws':
-        main_graph = nx.watts_strogatz_graph(n, math.ceil(n*0.1), 0.05)
+        main_graph = nx.watts_strogatz_graph(n, int(math.ceil(n*0.1)), 0.05)
     elif graph_type == 'ba':
         main_graph = nx.barabasi_albert_graph(n, int(math.ceil(n*0.1)))
 
