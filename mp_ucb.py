@@ -378,7 +378,7 @@ class Manager:
 
 if __name__ == '__main__':
 
-    n = 40
+    n = 100
     num_rounds = 10
     T = 1000
     K = 20
