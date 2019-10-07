@@ -55,30 +55,34 @@ def alpha_ts_posterior_update(
         earlier mean and variance using the conditional SMiN representation'''
 
     for q in range(Q):
-        lambda_t = cms_alpha(alpha*0.5, 1, 0, 1)
-        # if not robust:
-        vt = reward - prior_mu_sample
-        u_fac = np.exp(-0.5)*1/(np.sqrt(2*np.pi*(vt**2)))
-        u = np.random.uniform(0, u_fac)
-        lim = norm.pdf(vt, loc=0, scale=np.sqrt(lambda_t)*sigma)
-        i, min_u, corr_lambda = 0, u, lambda_t
-
-        while u > lim:
+        if not robust:
+            non_robust = 1
             lambda_t = cms_alpha(alpha*0.5, 1, 0, 1)
+            vt = reward - prior_mu_sample
+            u_fac = np.exp(-0.5)*1/(np.sqrt(2*np.pi*(vt**2)))
             u = np.random.uniform(0, u_fac)
             lim = norm.pdf(vt, loc=0, scale=np.sqrt(lambda_t)*sigma)
-            if u < min_u or u <= lim:
-                corr_lambda = lambda_t
-            i += 1
-            if i > 100000:
-                break
+            i, min_u, corr_lambda = 0, u, lambda_t
 
-        lambda_t = corr_lambda
+            while u > lim:
+                lambda_t = cms_alpha(alpha*0.5, 1, 0, 1)
+                u = np.random.uniform(0, u_fac)
+                lim = norm.pdf(vt, loc=0, scale=np.sqrt(lambda_t)*sigma)
+                if u < min_u or u <= lim:
+                    corr_lambda = lambda_t
+                i += 1
+                if i > 100000:
+                    break
+
+            lambda_t = corr_lambda
+        else:
+            lambda_t = 1
+            non_robust = 0
         this_mu = (
             prior_mu * prior_lambda_sum +
-            reward/lambda_t)/(prior_lambda_sum + 1/lambda_t)
+            reward/lambda_t)/(prior_lambda_sum + 1/lambda_t*non_robust)
         this_sigma = prior_sigma * \
-            prior_lambda_sum / (prior_lambda_sum + 1/lambda_t)
+            prior_lambda_sum / (prior_lambda_sum + 1/lambda_t*non_robust)
         lambda_sum = prior_lambda_sum + 1/lambda_t
         prior_mu_sample = np.random.normal(this_mu, np.sqrt(this_sigma))
 
@@ -416,8 +420,8 @@ def plot_curves(labels, curves, T, output_file):
     plt.xscale('log')
     plt.ylim(0, 2000)
     plt.xlim(100, T)
-    plt.xlabel(r'$T \times 10^4$')
-    plt.ylabel('Time-Normalized Regret')
+    plt.xlabel('T')
+    plt.ylabel('Average Regret at Time T')
     plt.legend(loc='upper right')
 
     plt.savefig(output_file, dpi=300)
@@ -473,7 +477,7 @@ if __name__ == "__main__":
     if args.t is None:
         args.t = args.k*1000
 
-    if args.e == 0:
+    if args.experiment == 0:
 
         labels = [
             'Alpha-TS',
@@ -508,7 +512,7 @@ if __name__ == "__main__":
             labels, z, args.t, 'comparison_T%d_K%d_a%.2f_s%d_n%d.pdf' %
             (args.t, args.k, args.alpha, args.sigma, args.trials))
 
-    elif args.e == 1:
+    elif args.experiment == 1:
 
         labels = [
             '$\alpha = 1.1$',

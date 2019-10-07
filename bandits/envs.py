@@ -77,21 +77,21 @@ class Environment:
             return np.random.binomial(1, self.params[arm], 1)
 
         if self.dist == 'stable':
-            
+
             _alpha = self.alpha[arm]
             _beta = self.beta[arm]
 
-            b = np.arctan(_beta * np.tan (0.5 * np.pi *_alpha))
+            b = np.arctan(_beta * np.tan(0.5 * np.pi * _alpha))
             s = (1 + (_beta * np.tan(0.5 * np.pi * _alpha))**2)**(0.5/_alpha)
 
             v = np.random.uniform(-0.5*np.pi, 0.5*np.pi)
             w = np.random.exponential(1)
 
             if _alpha == 1:
-                z = 2/np.pi * ((0.5*np.pi + _beta*v)*np.tan(v) - 
+                z = 2/np.pi * ((0.5*np.pi + _beta*v)*np.tan(v) -
                     _beta * np.log((np.pi*0.5*w*np.cos(v))/(0.5*np.pi + _beta*v)))
             else:
                 z = s * (np.sin(_alpha*(v + b))/(np.cos(v)**(1/_alpha))) *\
                     (np.cos(v - _alpha*(v + b))/w)**((1-_alpha)/_alpha)
- 
+
             return float(z*self.scale[arm] + self.mean[arm])

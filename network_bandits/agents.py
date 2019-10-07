@@ -374,17 +374,17 @@ class DeltaThompsonSamplingAgent(NetworkAgent):
                         cntxx + (self.eps/self.sigma[arm])**2)
                     n_eff_arm = cntxx - kappa_i_arm
 
-                    post_mu_arm += \
-                        n_eff_arm*avgxx/(self.sigma[arm]**2)
-                    post_sigma_inv_arm += \
-                        n_eff_arm/(self.sigma[arm]**2)
+                    # post_mu_arm += \
+                    #     n_eff_arm*avgxx/(self.sigma[arm]**2)
+                    # post_sigma_inv_arm += \
+                    #     n_eff_arm/(self.sigma[arm]**2)
 
                 post_mu.append(post_mu_arm*1.0/post_sigma_inv_arm)
                 post_sigma.append(post_sigma_inv_arm**(-1))
 
             posterior_samples = []
             for mu, sigma in zip(post_mu, post_sigma):
-                posterior_samples.append(np.random.normal(mu, sigma))
+                posterior_samples.append(np.random.normal(mu, np.sqrt(sigma)))
 
             self.played_arm = np.argmax(posterior_samples)
 

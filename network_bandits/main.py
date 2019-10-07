@@ -75,8 +75,8 @@ if __name__ == '__main__':
     rounds = 1
     min_agents, max_agents = 30, 100
     min_arms, max_arms = 20, 20
-    num_iters = 10000
-    eps = 1
+    num_iters = 1000
+    eps = 3
     for round in range(rounds):
 
         num_agents = random.choice(range(min_agents, max_agents+1))
@@ -92,8 +92,8 @@ if __name__ == '__main__':
             num_arms,
             graphs,
             eps=eps,
-            mu_min=0,
-            mu_max=1,
+            mu_min=-20,
+            mu_max=20,
             sigma=5)
         G2 = copy.deepcopy(G1)
         G3 = copy.deepcopy(G1)
