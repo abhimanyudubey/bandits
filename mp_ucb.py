@@ -384,12 +384,15 @@ if __name__ == '__main__':
     K = 20
     env = Environment(K, 2, is_heavy_tailed=False)
 
-    regret_dict = []
-    for _ in range(4):
-        regret_dict.append({})
     graph_params = {}
     graph_params['choice_type'] = 'degree'
     threads = []
+    thread_manager = multiprocessing.Manager()
+
+    regret_dict = thread_manager.list()
+    for _ in range(4):
+        regret_dict.append({})
+
     plt.figure()
 
     def exec_thread(n, graph, graph_params, env, T, g, k):
@@ -406,6 +409,7 @@ if __name__ == '__main__':
         regret_dict[k][g][2].append(min_r)
 
         print('Done', round, g, k)
+        return k, g, total_r, max_r, min_r
 
     managers = []
     for round in range(num_rounds):
@@ -438,7 +442,7 @@ if __name__ == '__main__':
 
                 process = multiprocessing.Process(
                     target=exec_thread,
-                    args=[n, graph, graph_params, env, T, g, k])
+                    args=[n, graph, graph_params, env, T, g, k, regret_dict])
                 process.daemon = True
                 process.start()
                 threads.append(process)
