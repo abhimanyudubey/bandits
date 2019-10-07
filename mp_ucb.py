@@ -6,7 +6,7 @@ import math
 from scipy.special import gamma
 import argparse
 import multiprocessing
-import cPickle as pkl
+import pickle as pkl
 import datetime
 import matplotlib
 matplotlib.use('Agg')
