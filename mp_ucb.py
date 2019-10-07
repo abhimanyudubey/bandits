@@ -5,7 +5,7 @@ import dimod
 import math
 from scipy.special import gamma
 import argparse
-from threading import Thread
+import multiprocessing
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -436,14 +436,14 @@ if __name__ == '__main__':
                 else:
                     alg_type = 'decentralized'
 
-                process = Thread(
+                process = multiprocessing.Process(
                     target=exec_thread,
                     args=[n, graph, graph_params, env, T, g, k])
                 process.start()
                 threads.append(process)
 
-    for process in threads:
-        process.join()
+    # for process in threads:
+    #     process.join()
 
     print(regret_dict)
     # averaging now
