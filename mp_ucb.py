@@ -50,7 +50,7 @@ def generate_connected_graph(n, graph_type='er'):
     elif graph_type == 'ws':
         main_graph = nx.watts_strogatz_graph(n, math.ceil(n*0.1), 0.05)
     elif graph_type == 'ba':
-        print(n)
+        print(n, type(n), math.ceil(n*0.1), type(math.ceil(n*0.1)))
         main_graph = nx.barabasi_albert_graph(n, math.ceil(n*0.1))
 
     for edge in base_path_graph.edges:
