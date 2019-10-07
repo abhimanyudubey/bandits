@@ -393,13 +393,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-e', '--experiment_type', type=int)
+        '-e', type=int)
     parser.add_argument(
-        '-n', '--num_agents', type=int, required=False, default=50)
+        '-n', type=int, required=False, default=50)
     parser.add_argument(
-        '-t', '--graph-type', type=str, required=False, default='er')
+        '-t', type=str, required=False, default='er')
     parser.add_argument(
-        '-g', '--gamma', type=int, required=False, default=None)
+        '-g', type=int, required=False, default=None)
 
     args = parser.parse_args()
     if args.g is None:
