@@ -439,8 +439,8 @@ if __name__ == '__main__':
                 process = multiprocessing.Process(
                     target=exec_thread,
                     args=[n, graph, graph_params, env, T, g, k])
-                process.start()
                 process.daemon = True
+                process.start()
                 threads.append(process)
 
     for process in threads:
