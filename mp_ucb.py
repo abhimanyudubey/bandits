@@ -442,8 +442,8 @@ if __name__ == '__main__':
                 process.start()
                 threads.append(process)
 
-    # for process in threads:
-    #     process.join()
+    for process in threads:
+        process.join()
 
     print(regret_dict)
     # averaging now
