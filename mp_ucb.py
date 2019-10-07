@@ -395,7 +395,7 @@ if __name__ == '__main__':
 
     plt.figure()
 
-    def exec_thread(n, graph, graph_params, env, T, g, k):
+    def exec_thread(n, graph, graph_params, env, T, g, k, regret_dict):
         manager = Manager(
             n, g, alg_type, graph=graph, graph_params=graph_params)
 
