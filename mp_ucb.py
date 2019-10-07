@@ -506,32 +506,37 @@ if __name__ == '__main__':
         graph_params['choice_type'] = 'degree'
 
         for n in n_range:
-            graph = generate_connected_graph(n, args.t)
-            diam = nx.diam(graph)
-            g = math.ceil(math.sqrt(n))
+            for round in range(num_rounds):
+                graph = generate_connected_graph(n, args.t)
+                diam = nx.diam(graph)
+                g = int(math.ceil(diam*0.5))
 
-            for k in ['ftl_degree', 'ftl_distance', 'ftl_bc', 'decentralized']:
+                for k in [
+                        'ftl_degree',
+                        'ftl_distance',
+                        'ftl_bc',
+                        'decentralized']:
 
-                if k == 'ftl_degree':
-                    alg_type = 'ftl'
-                    graph_params['node_weight'] = 'degree'
-                elif k == 'ftl_distance':
-                    alg_type = 'ftl'
-                    graph_params['node_weight'] = 'distance'
-                elif k == 'ftl_bc':
-                    alg_type = 'ftl'
-                    graph_params['node_weight'] = 'bc'
-                else:
-                    alg_type = 'decentralized'
+                    if k == 'ftl_degree':
+                        alg_type = 'ftl'
+                        graph_params['node_weight'] = 'degree'
+                    elif k == 'ftl_distance':
+                        alg_type = 'ftl'
+                        graph_params['node_weight'] = 'distance'
+                    elif k == 'ftl_bc':
+                        alg_type = 'ftl'
+                        graph_params['node_weight'] = 'bc'
+                    else:
+                        alg_type = 'decentralized'
 
-                process = multiprocessing.Process(
-                    target=exec_thread,
-                    args=[
-                        n, graph, graph_params, env, T, g, k, args.t,
-                        regret_dict_base])
-                process.daemon = True
-                process.start()
-                threads.append(process)
+                    process = multiprocessing.Process(
+                        target=exec_thread,
+                        args=[
+                            n, graph, graph_params, env, T, g, k, args.t,
+                            regret_dict_base])
+                    process.daemon = True
+                    process.start()
+                    threads.append(process)
 
         for process in threads:
             process.join()
