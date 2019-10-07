@@ -440,6 +440,7 @@ if __name__ == '__main__':
                     target=exec_thread,
                     args=[n, graph, graph_params, env, T, g, k])
                 process.start()
+                process.daemon = True
                 threads.append(process)
 
     for process in threads:
